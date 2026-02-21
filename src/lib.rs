@@ -11,11 +11,13 @@
 pub mod hash;
 pub mod envelope;
 pub mod store;
+pub mod index;
 pub mod error;
 
 pub use crate::envelope::{Envelope, EnvelopeBuilder};
 pub use crate::hash::Hash256;
 pub use crate::store::Store;
+pub use crate::index::IndexedStore;
 pub use crate::error::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
