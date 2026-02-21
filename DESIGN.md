@@ -111,6 +111,41 @@ index: {
 - Schema defined by type
 - **Trade-off:** Redundancy vs query speed
 
+### Index Design Considerations
+
+**What goes in index vs payload?**
+- Index: Fields you query on frequently
+- Payload: Everything else (full content)
+
+**Index field types needed:**
+- Scalars: int, float, bool, string, timestamp
+- Hashes: references to other envelopes
+- Arrays: multiple values for same field (tags)
+- Maybe: ranges, geo-points, full-text tokens?
+
+**Index maintenance:**
+The envelope carries its own index fields, but a *system* needs to maintain searchable structures:
+- B-trees for range queries
+- Hash maps for exact lookups
+- Inverted indexes for tags/keywords
+- Reverse indexes for "who references me?"
+
+This is outside the envelope format — it's a storage/query layer concern. But the envelope needs to carry enough info to populate these indexes.
+
+**Denormalization:**
+Index fields may duplicate payload data. This is intentional:
+- Faster queries (no payload parsing)
+- Enables blind indexing (index without understanding payload format)
+- Cost: storage overhead, consistency burden
+
+**Computed fields:**
+Some index fields might be computed:
+- `word_count` from text payload
+- `checksum` of payload
+- `size` in bytes
+
+Who computes these? The envelope creator. The system trusts them (or verifies them).
+
 ## Versioning
 
 If we use content hashes, "updating" an object means:
@@ -199,6 +234,36 @@ Multiple envelopes in a file/database:
 3. Build simple store (append log + index)
 4. Test with a toy use case
 
+## The Cycle Question
+
+Content-addressing means `hash(content)` is the identity. This makes cycles structurally impossible:
+- A can't reference B if B references A (you'd need to know A's hash before A exists)
+
+**Is this a problem?**
+
+Many real-world data structures are DAGs anyway:
+- File systems (directories → files)
+- Git (commits → trees → blobs)
+- Document structures (sections → paragraphs → text)
+- Dependency graphs (usually acyclic)
+
+Where cycles appear:
+- Social graphs (Alice follows Bob follows Alice)
+- Bidirectional relationships (parent ↔ child)
+- Linked lists with back-pointers
+
+**Workarounds:**
+
+1. **Symbolic references** — Use a stable ID (UUID) in addition to content hash. Reference by UUID, resolve to latest hash via index.
+   
+2. **Relationship tables** — Store relationships separately from objects. Objects don't embed references; a separate structure maps relationships.
+
+3. **Accept the constraint** — Design data models as DAGs. Many do this anyway for versioning/immutability benefits.
+
+4. **Lazy/external cycles** — Cycles exist at query time, not storage time. Index maintains bidirectional views.
+
+**Current stance:** Accept the DAG constraint for now. The benefits (deduplication, caching, natural versioning) outweigh the flexibility loss. If cycles become essential, explore symbolic references.
+
 ## Open Questions
 
 1. How big should index fields be allowed to get?
@@ -206,3 +271,4 @@ Multiple envelopes in a file/database:
 3. Compression: per-envelope or in batches?
 4. How to handle large payloads (chunking)?
 5. Signing/authentication of envelopes?
+6. How to efficiently query "all objects that reference X"? (reverse index)
