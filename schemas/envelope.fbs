@@ -1,0 +1,78 @@
+// Envelope schema for FlatBuffers
+// Wraps zero-copy payloads with metadata for graphs, typing, and indexing
+
+namespace envelope;
+
+// A reference to another envelope by content hash
+struct Hash256 {
+  bytes: [ubyte:32];
+}
+
+// A typed relationship to another envelope
+table Relationship {
+  rel_type: string (required);    // Relationship type (e.g., "author", "parent")
+  target: Hash256 (required);     // Target envelope hash
+}
+
+// Key-value pair for index fields
+// Values are encoded as strings for simplicity; could be typed later
+table IndexField {
+  key: string (required);
+  value: string (required);
+  value_type: IndexValueType = String;
+}
+
+enum IndexValueType : byte {
+  String = 0,
+  Int64 = 1,
+  Float64 = 2,
+  Bool = 3,
+  Hash = 4,
+  Timestamp = 5
+}
+
+// The envelope itself
+table Envelope {
+  // Identity: computed as hash of (type_hash + relationships + index + payload)
+  // Not stored, derived on read
+  
+  // Type identification
+  type_hash: Hash256 (required);   // Hash of the schema for payload
+  type_name: string;               // Human-readable type name (optional, for debugging)
+  
+  // Graph edges (outgoing relationships)
+  relationships: [Relationship];
+  
+  // Queryable index fields (extracted from payload)
+  index: [IndexField];
+  
+  // Version chain
+  previous: Hash256;               // Previous version (null if first)
+  
+  // The actual payload (opaque bytes, interpreted via type_hash)
+  payload: [ubyte] (required);
+  
+  // Metadata
+  created_at: int64;               // Unix timestamp (optional)
+  flags: uint32;                   // Reserved for future use
+}
+
+// A tombstone marks an envelope as deleted/superseded
+table Tombstone {
+  supersedes: Hash256 (required);
+  reason: string;
+  created_at: int64;
+}
+
+// Union for top-level objects in storage
+union Object {
+  Envelope,
+  Tombstone
+}
+
+// Root type for a stored object
+table StoredObject {
+  object: Object;
+}
+
+root_type StoredObject;
